@@ -16,7 +16,7 @@ class RobotUsesr:
                  joystick_control=0.5, # user's ability to use the joystick (this should probably be a range, not a value)
                  desired_linear_speed=0.9, # how fast the user would like to go
                  last_direction=(1.0,0.0), # the direction in the x-y plane that the user is currently going
-                 curr_velocity=(0.0,0.0)): # the user's velocity in each the x and y directions 
+                 curr_velocity=(1.0,1.0)): # the user's velocity in each the x and y directions 
         self.joystick_control = joystick_control
         self.desired_linear_speed = desired_linear_speed
         self.curr_position = curr_position
@@ -73,6 +73,7 @@ class RobotUsesr:
 # set up initial state and global variables
 user = RobotUsesr()
 dt = 1./30 # 30 fps
+velocity_history = []
 
 #------------------------------------------------------------
 # set up figure and animation
@@ -84,6 +85,45 @@ ax.grid()
 line, = ax.plot([], [], 'o-', lw=2)
 velocity_text = ax.text(0.02, 0.95, '', transform=ax.transAxes)
 voice_text = ax.text(0.02, 0.90, '', transform=ax.transAxes)
+
+# def change_vel(pos, goal):
+#     (pos_x, pos_y) = pos
+#     (goal_x, goal_y) = goal
+#     # theta = np.arctan((goal_y - pos_y)/(goal_x - pos_x))
+#     d = np.sqrt((goal_y - pos_y)**2 + (goal_x - pos_x)**2)
+#     i_x = (goal_x - pos_x)/d
+#     i_y = (goal_y - pos_y)/d
+#     return (i_x, i_y)
+def find_magnitude(input_tuple):
+    return np.sqrt(input_tuple[0]**2+input_tuple[1]**2)
+
+def find_next_params(curr_velocity, 
+                     curr_pos,
+                     goal_direction,
+                     complaint,
+                     increase_vel = 2,
+                     decrease_vel = 2):
+    # (i_x, i_y) = change_vel(curr_pos, goal_direction)
+    new_vel = (0.0, 0.0)
+    if complaint == -1:
+        new_vel = (curr_velocity[0]*increase_vel, curr_velocity[1]*increase_vel)
+        # velocity_history.append(new_vel)
+    elif complaint == 1:
+        if len(velocity_history) >= 2:
+            pre_vel = find_magnitude(velocity_history[-1])
+            pre_pre_vel = find_magnitude(velocity_history[-2])
+            if pre_vel >= pre_pre_vel:
+                diff = pre_vel - pre_pre_vel
+                new_vel = (curr_velocity[0]-diff/2, curr_velocity[1]-diff/2)
+            else:
+                new_vel = (curr_velocity[0]-decrease_vel, curr_velocity[1]-decrease_vel)
+        else:
+            new_vel = (curr_velocity[0]-decrease_vel, curr_velocity[1]-decrease_vel)
+    else:
+        new_vel = curr_velocity
+
+    # velocity_history.append(new_vel)
+    return new_vel
 
 def init():
     """initialize animation"""
@@ -101,8 +141,16 @@ def animate(i):
     
     # Now we know the user's complaint and joystick control. Given those, we need to 
     # learn how to make an adjustment so they will be happy
+    n_velocity = find_next_params(velocity, user.curr_position, user.last_direction, complaint)
+    if i%(2*30)==0:
+        velocity_history.append(n_velocity)
+        print(velocity_history)
+    # print("******", n_velocity)
+    # print("------", velocity)
+    # print(velocity_history)
     
-    line.set_data(*user.step(velocity,dt)) # get user's update position and plot it 
+    line.set_data(*user.step(n_velocity,dt)) # get user's update position and plot it 
+    # line.set_data(*user.step(n_velocity,dt)) # get user's update position and plot it 
     
     velocity_text.set_text('Velocity  = %.1f, %.1f' % user.curr_velocity)
     voice_text.set_text('User: ' + user_complaints[complaint+1])
